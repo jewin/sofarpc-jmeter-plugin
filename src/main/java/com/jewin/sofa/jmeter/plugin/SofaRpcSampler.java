@@ -76,7 +76,6 @@ public class SofaRpcSampler extends AbstractJavaSamplerClient implements Interru
     @Override
     public void teardownTest(JavaSamplerContext context) {
         super.teardownTest(context);
-        consumerConfig.unRefer();
     }
 
     @Override
