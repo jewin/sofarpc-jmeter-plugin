@@ -5,6 +5,7 @@ import com.alipay.sofa.rpc.api.GenericService;
 import com.alipay.sofa.rpc.config.ApplicationConfig;
 import com.alipay.sofa.rpc.config.ConsumerConfig;
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.apache.jmeter.config.Arguments;
@@ -36,39 +37,27 @@ public class SofaRpcSampler extends AbstractJavaSamplerClient implements Interru
 
     private final static String DIRECT_URL = "directUrl";
 
+    private final static String PROTOCL = "protocl";
+
     private String interfaceId = null;
     private JsonObject paramter = null;
 
-
-//    {
-//        "genericConfig" : {
-//                "interfaceId" : "com.xxx.com",
-//                "timeout" : "1000",
-//                "directUrl" : "127.0.0.1:21220"
-//        },
-//        "invokeParamter" : {
-//                "argsCount" : "2",
-//                "callMethodName" : "callme",
-//                "arg0" : {
-//                  "clazzType" : "java.lang.Integer",
-//                    "argValue" : {}
-//                  },
-//                "arg1" : {
-//                    "clazzType" : "java.lang.Integer",
-//                    "argValue" : {}
-//              }
-//    }
-//    }
+    private static GenericService genericService = null;
 
     @Override
     public void setupTest(JavaSamplerContext context) {
-        String jsonArgs = context.getParameter("args");
-        paramter = new JsonParser().parse(jsonArgs).getAsJsonObject();
-        JsonObject genericConfig = paramter.get("genericConfig").getAsJsonObject();
+        if (null != genericService ){
+            return;
+        }
 
-        interfaceId = genericConfig.get(INTERFACE_ID).getAsString();
-        String directUrl = genericConfig.get(DIRECT_URL).getAsString();
-        Integer timeout =  genericConfig.get(TIME_OUT).getAsInt();
+        String rpcConfig = context.getParameter("rpcConfig");
+        JsonObject rpcConfigJson = new JsonParser().parse(rpcConfig).getAsJsonObject();
+
+        interfaceId = rpcConfigJson.get(INTERFACE_ID).getAsString();
+        String directUrl = rpcConfigJson.get(DIRECT_URL).getAsString();
+        Integer timeout =  rpcConfigJson.get(TIME_OUT).getAsInt();
+        JsonElement protoclElement = rpcConfigJson.get(PROTOCL);
+        String protocol = null == protoclElement ? "bolt" : protoclElement.getAsString();
 
         ApplicationConfig application = new ApplicationConfig().setAppName("jmeter-client");
         consumerConfig
@@ -78,8 +67,10 @@ public class SofaRpcSampler extends AbstractJavaSamplerClient implements Interru
                 .setTimeout(timeout)
                 .setRegister(false)
                 .setGeneric(true)
-                .setProtocol("bolt")
+                .setProtocol(protocol)
         ;
+
+        genericService = consumerConfig.refer();
     }
 
     @Override
@@ -90,37 +81,40 @@ public class SofaRpcSampler extends AbstractJavaSamplerClient implements Interru
 
     @Override
     public Arguments getDefaultParameters() {
-        String jsonArgs = "{\n" +
-                " \"genericConfig\" : {\n" +
+        String rpcConfig = "{" +
                 " \t\"interfaceId\" : \"com.alipay.sofa.rpc.test.HelloService\",\n" +
-                " \t\"timeout\" : \"300000\",\n" +
-                " \t\"directUrl\" : \"bolt://127.0.0.1:22000?appName=xxx-server\"\n" +
-                " },\n" +
-                " \"invokeParameter\" : {\n" +
+                " \t\"timeout\" : \"3000\",\n" +
+                " \t\"directUrl\" : \"127.0.0.1:22000\",\n" +
+                " \t\"protocol\" : \"bolt\"\n" +
+                " }";
+
+        String invokeParameter = "{" +
                 " \t\"argsCount\" : \"2\",\n" +
                 "\t\"callMethodName\" : \"sayHello\",\n" +
                 "\t\"arg0\" : {\n" +
                 "\t\t\"clazzType\" : \"java.lang.String\",\n" +
-                "\t\t\"argValue\" : \"xx\"\n" +
+                "\t\t\"argValue\" : \"jewin\"\n" +
                 "\t},\n" +
                 "\t\"arg1\" : {\n" +
                 "\t\t\"clazzType\" : \"int\",\n" +
                 "\t\t\"argValue\" : 29\n" +
                 "\t\t}\n" +
-                " \t}\t\n" +
-                "}";
+                " }\t";
 
         Arguments params = new Arguments();
-        params.addArgument("args", jsonArgs);
+        params.addArgument("rpcConfig", rpcConfig);
+        params.addArgument("invokeParameter", invokeParameter);
         return params;
     }
 
     public SampleResult runTest(JavaSamplerContext javaSamplerContext) {
+
         SampleResult result = new SampleResult();
         result.setDataType("text");
 
         try {
-            JsonObject invokeParamter = paramter.get("invokeParameter").getAsJsonObject();
+            String invokeParameter = javaSamplerContext.getParameter("invokeParameter");
+            JsonObject invokeParamter = new JsonParser().parse(invokeParameter).getAsJsonObject();
             int argsCount = invokeParamter.get("argsCount").getAsInt();
             String callMethodName = invokeParamter.get("callMethodName").getAsString();
 
@@ -132,8 +126,6 @@ public class SofaRpcSampler extends AbstractJavaSamplerClient implements Interru
                 argsType[i] = argObject.get("clazzType").getAsString();
                 argValue[i] = parseArgValue(argObject.get("argValue").getAsString(), argsType[i]);
             }
-
-            GenericService genericService = consumerConfig.refer();
 
             result.sampleStart();
             Object returnObject =  genericService.$invoke(callMethodName, argsType, argValue);
@@ -195,30 +187,11 @@ public class SofaRpcSampler extends AbstractJavaSamplerClient implements Interru
     }
 
     public static void main(String[] args) {
-        String jsonArgs = "{\n" +
-                " \"genericConfig\" : {\n" +
-                " \t\"interfaceId\" : \"com.alipay.sofa.rpc.test.HelloService\",\n" +
-                " \t\"timeout\" : \"300000\",\n" +
-                " \t\"directUrl\" : \"bolt://127.0.0.1:22000?appName=xxx-server\"\n" +
-                " },\n" +
-                " \"invokeParameter\" : {\n" +
-                " \t\"argsCount\" : \"2\",\n" +
-                "\t\"callMethodName\" : \"sayHello\",\n" +
-                "\t\"arg0\" : {\n" +
-                "\t\t\"clazzType\" : \"java.lang.String\",\n" +
-                "\t\t\"argValue\" : \"xx\"\n" +
-                "\t},\n" +
-                "\t\"arg1\" : {\n" +
-                "\t\t\"clazzType\" : \"int\",\n" +
-                "\t\t\"argValue\" : 29\n" +
-                "\t\t}\n" +
-                " \t}\t\n" +
-                "}";
-        Arguments arg = new Arguments();
-        arg.addArgument("args", jsonArgs);
-        JavaSamplerContext context = new JavaSamplerContext(arg);
 
         SofaRpcSampler ss = new SofaRpcSampler();
+        Arguments arg = ss.getDefaultParameters();
+        JavaSamplerContext context = new JavaSamplerContext(arg);
+
         ss.setupTest(context);
         ss.runTest(context);
         ss.teardownTest(context);
