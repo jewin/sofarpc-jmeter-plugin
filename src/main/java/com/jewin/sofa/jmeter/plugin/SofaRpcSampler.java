@@ -18,6 +18,8 @@ import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * @author jianyang
@@ -40,37 +42,46 @@ public class SofaRpcSampler extends AbstractJavaSamplerClient implements Interru
     private final static String PROTOCL = "protocl";
 
     private String interfaceId = null;
-    private JsonObject paramter = null;
 
     private static GenericService genericService = null;
 
+    private final static Lock lock = new ReentrantLock();
+
     @Override
     public void setupTest(JavaSamplerContext context) {
-        if (null != genericService ){
-            return;
+        try {
+            lock.lock();
+
+            if (null != genericService ){
+                return;
+            }
+
+            String rpcConfig = context.getParameter("rpcConfig");
+            JsonObject rpcConfigJson = new JsonParser().parse(rpcConfig).getAsJsonObject();
+
+            interfaceId = rpcConfigJson.get(INTERFACE_ID).getAsString();
+            String directUrl = rpcConfigJson.get(DIRECT_URL).getAsString();
+            Integer timeout =  rpcConfigJson.get(TIME_OUT).getAsInt();
+            JsonElement protoclElement = rpcConfigJson.get(PROTOCL);
+            String protocol = null == protoclElement ? "bolt" : protoclElement.getAsString();
+
+            ApplicationConfig application = new ApplicationConfig().setAppName("jmeter-client");
+            consumerConfig
+                    .setApplication(application)
+                    .setInterfaceId(interfaceId)
+                    .setDirectUrl(directUrl)
+                    .setTimeout(timeout)
+                    .setRegister(false)
+                    .setGeneric(true)
+                    .setProtocol(protocol)
+            ;
+
+            genericService = consumerConfig.refer();
+        } catch (Exception e) {
+            LOG.error("rpc调用，客户端初始化失败。", e);
+        } finally {
+            lock.unlock();
         }
-
-        String rpcConfig = context.getParameter("rpcConfig");
-        JsonObject rpcConfigJson = new JsonParser().parse(rpcConfig).getAsJsonObject();
-
-        interfaceId = rpcConfigJson.get(INTERFACE_ID).getAsString();
-        String directUrl = rpcConfigJson.get(DIRECT_URL).getAsString();
-        Integer timeout =  rpcConfigJson.get(TIME_OUT).getAsInt();
-        JsonElement protoclElement = rpcConfigJson.get(PROTOCL);
-        String protocol = null == protoclElement ? "bolt" : protoclElement.getAsString();
-
-        ApplicationConfig application = new ApplicationConfig().setAppName("jmeter-client");
-        consumerConfig
-                .setApplication(application)
-                .setInterfaceId(interfaceId)
-                .setDirectUrl(directUrl)
-                .setTimeout(timeout)
-                .setRegister(false)
-                .setGeneric(true)
-                .setProtocol(protocol)
-        ;
-
-        genericService = consumerConfig.refer();
     }
 
     @Override
@@ -81,9 +92,9 @@ public class SofaRpcSampler extends AbstractJavaSamplerClient implements Interru
     @Override
     public Arguments getDefaultParameters() {
         String rpcConfig = "{" +
-                " \t\"interfaceId\" : \"com.alipay.sofa.rpc.test.HelloService\",\n" +
+                " \t\"interfaceId\" : \"com.jewin.jmeter.plugin.rpc.server.test.HelloService\",\n" +
                 " \t\"timeout\" : \"3000\",\n" +
-                " \t\"directUrl\" : \"127.0.0.1:22000\",\n" +
+                " \t\"directUrl\" : \"10.19.13.51:22000\",\n" +
                 " \t\"protocol\" : \"bolt\"\n" +
                 " }";
 
